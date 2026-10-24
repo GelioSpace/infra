@@ -1,0 +1,8 @@
+.system-link*
+secrets/
+.toss/
+!templates/*
+.direnv
+result
+.system-link
+*.qcow2

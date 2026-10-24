@@ -1,0 +1,58 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  nodes:
+    runs-on: ubuntu-latest
+    outputs:
+      nodes: ${{ steps.nodes.outputs.nodes }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: extra-experimental-features = pipe-operators
+      - id: nodes
+        run: echo "nodes=$(nix eval --json .#nodeMeta --apply builtins.attrNames)" >> "$GITHUB_OUTPUT"
+
+  # PRs only check that every node builds.
+  build:
+    if: github.event_name == 'pull_request'
+    needs: nodes
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJSON(needs.nodes.outputs.nodes) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: extra-experimental-features = pipe-operators
+      - run: nix build --no-link --print-build-logs ".#nixosConfigurations.${{ matrix.node }}.config.system.build.toplevel"
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: nodes
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJSON(needs.nodes.outputs.nodes) }}
+    # Never run two deploys of the same node at once, and never cancel one halfway.
+    concurrency:
+      group: deploy-${{ matrix.node }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: extra-experimental-features = pipe-operators
+      - name: Deploy ${{ matrix.node }}
+        env:
+          SSH_PRIVKEY_INFRA: ${{ secrets.SSH_PRIVKEY_INFRA }}
+        run: nix shell --inputs-from . nixpkgs#nixos-rebuild-ng --command ci/deploy.sh "${{ matrix.node }}"
