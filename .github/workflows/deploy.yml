@@ -15,9 +15,13 @@ jobs:
       - uses: actions/checkout@v5
       - uses: cachix/install-nix-action@v31
         with:
-          extra_nix_config: extra-experimental-features = pipe-operators
+          extra_nix_config: experimental-features = nix-command flakes pipe-operators
       - id: nodes
-        run: echo "nodes=$(nix eval --json .#nodeMeta --apply builtins.attrNames)" >> "$GITHUB_OUTPUT"
+        # Separate assignment, so a failing eval fails the step instead of
+        # producing an empty output.
+        run: |
+          nodes=$(nix eval --json .#nodeMeta --apply builtins.attrNames)
+          echo "nodes=$nodes" >> "$GITHUB_OUTPUT"
 
   # PRs only check that every node builds.
   build:
@@ -32,7 +36,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: cachix/install-nix-action@v31
         with:
-          extra_nix_config: extra-experimental-features = pipe-operators
+          extra_nix_config: experimental-features = nix-command flakes pipe-operators
       - run: nix build --no-link --print-build-logs ".#nixosConfigurations.${{ matrix.node }}.config.system.build.toplevel"
 
   deploy:
@@ -51,7 +55,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: cachix/install-nix-action@v31
         with:
-          extra_nix_config: extra-experimental-features = pipe-operators
+          extra_nix_config: experimental-features = nix-command flakes pipe-operators
       - name: Deploy ${{ matrix.node }}
         env:
           SSH_PRIVKEY_INFRA: ${{ secrets.SSH_PRIVKEY_INFRA }}
