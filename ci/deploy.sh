@@ -19,17 +19,22 @@ unit=nixos-deploy-rollback
 
 log() { printf '\e[1mdeploy/%s:\e[0m %s\n' "$node" "$*" >&2; }
 fail() { log "$*"; exit 1; }
+trap 'log "failed at line $LINENO: $BASH_COMMAND"' ERR
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
+# Plain assignments, so a failing eval stops the script under `set -e`.
+# (`nix eval --raw` prints no trailing newline, so `read` gets a here-string.)
 # shellcheck disable=SC2016 # Nix interpolation, not shell
-read -r host port user < <(nix eval --raw ".#nodeMeta.$node.settings" \
+settings=$(nix eval --raw ".#nodeMeta.$node.settings" \
   --apply 's: "${s.host} ${toString (s.port or 22)} ${s.user or "root"}"')
+read -r host port user <<< "$settings"
 target="$user@$host"
 
+host_key=$(nix eval --raw ".#nodeMeta.$node.settings.hostKey")
 if [[ $port == 22 ]]; then known=$host; else known="[$host]:$port"; fi
-echo "$known $(nix eval --raw ".#nodeMeta.$node.settings.hostKey")" > "$tmp/known_hosts"
+echo "$known $host_key" > "$tmp/known_hosts"
 
 ssh_opts=(
   -p "$port"
