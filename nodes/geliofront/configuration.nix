@@ -2,7 +2,6 @@
   imports = [
     ../../modules/core.nix
     ../../modules/docker.nix
-    ../../modules/ssh-keys.nix
     ../../modules/imperative-caddy.nix
     ../../modules/network-server.nix
   ];
